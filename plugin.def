@@ -1,0 +1,5 @@
+LIBRARY sampcdn
+EXPORTS
+    Supports=_Supports@0
+    Load=_Load@4
+    Unload=_Unload@0
