@@ -137,56 +137,128 @@ namespace
         if (url.find_first_of(" \t\r\n?#") != std::string::npos || url.size() > 160)
             return false;
         const std::size_t proto_end = url.find("://") + 3;
-        return url.size() > proto_end && url.find('/', proto_end) == std::string::npos && url.find('@', proto_end) == std::string::npos;
+        if (url.size() <= proto_end || url.find('/', proto_end) != std::string::npos ||
+            url.find('@', proto_end) != std::string::npos)
+            return false;
+
+        const std::string host = url.substr(proto_end);
+        std::size_t port_pos = host.find(':');
+        if (host[0] == '[')
+        {
+            const std::size_t bracket = host.find(']');
+            if (bracket == std::string::npos || bracket == 1)
+                return false;
+            in6_addr ipv6;
+            if (inet_pton(AF_INET6, host.substr(1, bracket - 1).c_str(), &ipv6) != 1)
+                return false;
+            if (bracket + 1 == host.size())
+                return true;
+            if (host[bracket + 1] != ':')
+                return false;
+            port_pos = bracket + 1;
+        }
+        else if (port_pos == 0 || (port_pos != std::string::npos &&
+                 host.find(':', port_pos + 1) != std::string::npos))
+            return false;
+
+        if (port_pos != std::string::npos)
+        {
+            unsigned port;
+            if (!parse_port(host.substr(port_pos + 1), port))
+                return false;
+        }
+        return true;
+    }
+
+    bool write_template(const std::string& path, const Settings& settings, std::string& error)
+    {
+        std::ofstream config(path.c_str(), std::ios::out | std::ios::trunc);
+        if (!config)
+        {
+            error = "cannot create or update " + path;
+            return false;
+        }
+        config << "# sampCDN configuration\n"
+               << "# Use a public IP or domain for remote players.\n"
+               << "public_url = " << settings.public_url << "\n"
+               << "bind = " << settings.bind_ip << "\n";
+        config.flush();
+        if (!config)
+        {
+            error = "cannot write " + path;
+            return false;
+        }
+        return true;
     }
 }
 
 bool load_config_file(const std::string& path, Settings& settings, std::string& error)
 {
+    error.clear();
     settings.config_path = path;
+    settings.public_url.clear();
+    settings.bind_ip = "0.0.0.0";
+
     std::ifstream config(path.c_str());
-    if (!config)
+    bool repair = !config;
+    bool has_url = false;
+    bool has_bind = false;
+    if (config)
     {
-        // First launch: create a genuinely empty configuration file, without failing startup.
-        std::ofstream create(path.c_str(), std::ios::out | std::ios::app);
-        if (!create)
+        std::string line;
+        while (std::getline(config, line))
         {
-            error = "cannot read or create " + path;
-            return false;
+            const std::string cleaned = trim(line);
+            if (cleaned.empty() || cleaned[0] == '#' || cleaned[0] == ';')
+                continue;
+
+            std::string key, value;
+            if (!parse_line(line, key, value))
+            {
+                repair = true;
+                continue;
+            }
+            if (key == "public_url")
+            {
+                if (has_url)
+                    repair = true;
+                if (validate_url(value))
+                {
+                    settings.public_url = value;
+                    has_url = true;
+                }
+                else
+                    repair = true;
+            }
+            else if (key == "bind")
+            {
+                if (has_bind)
+                    repair = true;
+                if (valid_ipv4(value))
+                {
+                    settings.bind_ip = value;
+                    has_bind = true;
+                }
+                else
+                    repair = true;
+            }
+            else
+                repair = true;
         }
-        create.close();
-        config.open(path.c_str());
-        if (!config)
+        if (config.bad())
         {
             error = "cannot read " + path;
             return false;
         }
     }
-    std::string line;
-    while (std::getline(config, line))
+    if (!has_url)
     {
-        std::string key, value;
-        if (!parse_line(line, key, value))
-            continue;
-        if (key == "public_url")
-            settings.public_url = value;
-        else if (key == "bind")
-        {
-            if (!valid_ipv4(value))
-            {
-                error = "invalid bind in " + path;
-                return false;
-            }
-            settings.bind_ip = value;
-        }
-        // Do not configure the HTTP port separately; always use the game's UDP port number.
+        settings.public_url = make_public_url("", settings.port);
+        repair = true;
     }
-    if (!settings.public_url.empty() && !validate_url(settings.public_url))
-    {
-        error = "invalid public_url in " + path;
-        return false;
-    }
-    return true;
+    if (!has_bind)
+        repair = true;
+    return !repair || write_template(path, settings, error);
 }
 
 void load_server_config_file(const std::string& path, unsigned& port)
@@ -224,8 +296,6 @@ bool load_settings(Settings& settings, std::string& error)
         error = "cannot determine plugin directory";
         return false;
     }
-    if (!load_config_file(path_join(module_dir, "cdn.cfg"), settings, error))
-        return false;
     const std::string server_dir = executable_directory();
     // SA-MP normally reads server.cfg relative to its working directory.
     std::ifstream cwd_config("server.cfg");
@@ -233,6 +303,8 @@ bool load_settings(Settings& settings, std::string& error)
         load_server_config_file("server.cfg", settings.port);
     else if (!server_dir.empty())
         load_server_config_file(path_join(server_dir, "server.cfg"), settings.port);
+    if (!load_config_file(path_join(module_dir, "cdn.cfg"), settings, error))
+        return false;
     settings.public_url = make_public_url(settings.public_url, settings.port);
     return true;
 }

@@ -30,11 +30,13 @@ cmake --build build -j
 
 ## Configuration
 
-The plugin creates an empty `cdn.cfg` next to the DLL/SO if it is missing. All settings are optional:
+The plugin creates an template `cdn.cfg` next to the DLL/SO if it is missing. All settings are optional:
 
 ```ini
+# sampCDN configuration
+# Use a public IP or domain for remote players.
 public_url = http://localhost:7777
-# bind = 0.0.0.0
+bind = 0.0.0.0
 ```
 
 `public_url` is the address sent to clients. By default it uses `http://localhost:<server port>`; for public servers, set your public IP or domain. `bind` defaults to `0.0.0.0`.
