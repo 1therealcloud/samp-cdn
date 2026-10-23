@@ -17,14 +17,10 @@ add_library(sampCDN SHARED
     source/config.cpp
     source/fixes.cpp
     source/index_hook.cpp
-    
-    ${SAMP_SDK_DIR}/amxplugin.cpp
-    ${SAMP_SDK_DIR}/amxplugin2.cpp
 )
 
 target_include_directories(sampCDN PRIVATE
     source
-    include
     ${SAMP_SDK_DIR}
 )
 
@@ -37,5 +33,5 @@ else()
     target_compile_definitions(sampCDN PRIVATE LINUX)
     target_compile_options(sampCDN PRIVATE -fvisibility=hidden -fno-omit-frame-pointer)
     target_link_libraries(sampCDN PRIVATE pthread dl)
-    set_target_properties(sampCDN PROPERTIES PREFIX "" SUFFIX ".so")
+    set_target_properties(sampCDN PROPERTIES PREFIX "" SUFFIX ".so" LINK_FLAGS "-static-libgcc -static-libstdc++")
 endif()

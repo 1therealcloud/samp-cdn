@@ -298,7 +298,7 @@ bool CHttpServer::start(const std::string& bind_address, std::uint16_t port, std
     try
     {
         const unsigned cpus = std::thread::hardware_concurrency();
-        max_workers_ = std::max(4u, std::min(32u, cpus ? cpus * 2 : 8u));
+        max_workers_ = (std::max)(4u, (std::min)(32u, cpus ? cpus * 2 : 8u));
         workers_.reserve(max_workers_);
         for (unsigned i = 0; i < 2; ++i)
             workers_.push_back(std::thread(&CHttpServer::work_loop, this));
